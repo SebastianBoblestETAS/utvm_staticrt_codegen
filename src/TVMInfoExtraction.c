@@ -9,12 +9,28 @@
 #include "tvm/runtime/crt/packed_func.h"
 
 void printArgInfoFloat(const Arg_Info *arg) {
-  printf("Arg_Info:");
-  for (int i=0; i<arg->dataSize; i+=4)
-  {
-      printf(" %f", *(float*)(arg->data+i));
+  printf("Arg_Info(");
+  for (int i = 0; i < arg->dataSize; i += 4) {
+    printf(" %f", *(float *)(arg->data + i));
   }
-  printf(" size: %lu", arg->dataSize);
+  printf(" size: %lu)", arg->dataSize);
+}
+
+void printStorageInfoFloat(const Storage_Info *arg) {
+  printf("Storage_Info(");
+  for (int i = 0; i < arg->size; i += 4) {
+    printf(" %f", *(float *)(arg->buffer + i));
+  }
+  printf(" size: %lu)", arg->size);
+  if (arg->static_data == NULL) {
+    printf(" static_data: NULL\n");
+  } else {
+    printf(" static_data: ");
+    for (int i = 0; i < arg->size; i += 4) {
+      printf(" %f", *(float *)(arg->buffer + i));
+    }
+    printf(" pointers: %p %p\n", arg->buffer, arg->static_data);
+  }
 }
 
 const TVMModule *TVMSystemLibEntryPoint(void) { return NULL; }
@@ -99,6 +115,8 @@ static Storage_Info *GetOrAddStorage(Graph_Info *gi, void *p, size_t sz,
   newS->buffer = p;
   newS->size = sz;
 
+  // printf("GetOrAddStorage(%lu)\n", newS->size);
+
   if (copy_data) {
     newS->static_data = malloc(sz);
     memcpy(newS->static_data, p, sz);
@@ -167,25 +185,34 @@ Graph_Info *extract_graph_info(void *grt, const char *params_data,
         arg->dataSize = GetTensorSize(&g->data_entry[eids[j]].dl_tensor);
         printf("j: %d ", j);
         printArgInfoFloat(arg);
-        printf("\n");
+        printf(" g->storage_poolcount=%u\n", g->storage_pool_count);
 
         Storage_Info *storage = NULL;
         uintptr_t p = (uintptr_t)arg->data;
         for (int k = 0; k < g->storage_pool_count; k++) {
           uintptr_t ps = (uintptr_t)g->storage_pool[k].array.dl_tensor.data;
           size_t sz = GetTensorSize(&g->storage_pool[k].array.dl_tensor);
+
+          printf("\tk = %d: TensorSize = %lu\n", k, sz);
+
           if (p >= ps && p < ps + sz) {
+            printf("\tNonstatic ");
             // Arg is mapped to storage. Is static if part of params file.
             storage = GetOrAddStorage(
                 gi, (void *)ps, sz,
                 IsInList(eids[j], staticInputEIDs, numStaticInputEIDs));
             arg->offset = (uintptr_t)storage->buffer - (uintptr_t)arg->data;
+            printf("\t");
+            printStorageInfoFloat(storage);
             break;
           }
         }
         if (!storage) {
+          printf("\tStatic ");
           // Has to be static data.
           storage = GetOrAddStorage(gi, arg->data, arg->dataSize, true);
+          printf("\t");
+          printStorageInfoFloat(storage);
         }
         arg->storage = storage;
 
