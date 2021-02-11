@@ -69,9 +69,11 @@ std::ostream &operator<<(std::ostream &o, const Arg_Info &ai) {
 }
 
 std::ostream &operator<<(std::ostream &o, const Op_Info &oi) {
-  o << "Op_Info(active=" << oi.active << ", name="
-    << "omitted"  // oi.name
-    << ", numArgs=" << oi.numArgs << ")";
+    if (!oi.active) {
+        o << "Op_Info(inactive)";
+        return o;
+    }
+  o << "Op_Info(name=" << oi.name << ", numArgs=" << oi.numArgs << ")";
   return o;
 }
 
@@ -103,8 +105,7 @@ CodeGenerator::CodeGenerator(const Graph_Info *gi) {
     if (s->static_data) {
       data.assign(s->static_data, s->static_data + s->size);
     }
-    cout << "storage " << i << ": " << *s
-         << " as float: " << asFloatsString(data) << std::endl;
+    cout << "storage " << i << ": " << *s << " as float: " << asFloatsString(data) << std::endl;
     m_storages.push_back({s->size, std::move(data)});
     storageToNewStorageIndex[s] = m_storages.size() - 1;
   }
@@ -112,17 +113,16 @@ CodeGenerator::CodeGenerator(const Graph_Info *gi) {
   std::map<Arg_Info *, Arg *> argToNewArg;
   for (int i = 0; i < gi->numOps; i++) {
     auto &op = gi->ops[i];
-    cout << "i=" << i << " op=" << op << std::endl;
+    cout << "i=" << i << " " << op << std::endl;
     if (op.active) {
       std::vector<std::unique_ptr<Arg>> args;
       for (int j = 0; j < op.numArgs; j++) {
         auto &arg = op.args[j];
-        cout << "\tj=" << j << " arg=" << arg << std::endl;
         int index = storageToNewStorageIndex[arg.storage];
         std::unique_ptr<Arg> newArg(new Arg{index, arg.offset, arg.dataSize});
         argToNewArg[&op.args[j]] = newArg.get();
 
-        std::cout << "\tArg_Info " << j << "= " << argInfoAsFloatsString(arg) << std::endl;
+        cout << "\tArg_Info " << j << "= " << argInfoAsFloatsString(arg) << std::endl;
 
         args.push_back(std::move(newArg));
       }
