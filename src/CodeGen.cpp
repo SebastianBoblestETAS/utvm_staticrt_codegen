@@ -23,7 +23,23 @@ std::string asFloatsString(const std::vector<uint8_t> &arg) {
   ss << "(";
   std::string sep = "";
   for (size_t i = 0; i < arg.size(); i += 4) {
-    ss << sep << *reinterpret_cast<const float*>((arg.data() + i));
+    ss << sep << *reinterpret_cast<const float *>((arg.data() + i));
+    sep = ", ";
+  }
+  ss << ")";
+  return ss.str();
+}
+
+std::string argInfoAsFloatsString(const Arg_Info &ai) {
+  if (!ai.dataSize) {
+    return "empty";
+  }
+  assert(ai.dataSize % 4 == 0);
+  std::stringstream ss;
+  ss << "(";
+  std::string sep = "";
+  for (size_t i = 0; i < ai.dataSize; i += 4) {
+    ss << sep << *(reinterpret_cast<const float *>((char*)ai.data+i));
     sep = ", ";
   }
   ss << ")";
@@ -53,7 +69,8 @@ std::ostream &operator<<(std::ostream &o, const Arg_Info &ai) {
 }
 
 std::ostream &operator<<(std::ostream &o, const Op_Info &oi) {
-  o << "Op_Info(active=" << oi.active << ", name=" << oi.name
+  o << "Op_Info(active=" << oi.active << ", name="
+    << "omitted"  // oi.name
     << ", numArgs=" << oi.numArgs << ")";
   return o;
 }
@@ -86,8 +103,8 @@ CodeGenerator::CodeGenerator(const Graph_Info *gi) {
     if (s->static_data) {
       data.assign(s->static_data, s->static_data + s->size);
     }
-    cout << "data=" << data << std::endl;
-    cout << "data as float: " << asFloatsString(data) << std::endl;
+    cout << "storage " << i << ": " << *s
+         << " as float: " << asFloatsString(data) << std::endl;
     m_storages.push_back({s->size, std::move(data)});
     storageToNewStorageIndex[s] = m_storages.size() - 1;
   }
@@ -104,6 +121,9 @@ CodeGenerator::CodeGenerator(const Graph_Info *gi) {
         int index = storageToNewStorageIndex[arg.storage];
         std::unique_ptr<Arg> newArg(new Arg{index, arg.offset, arg.dataSize});
         argToNewArg[&op.args[j]] = newArg.get();
+
+        std::cout << "\tArg_Info " << j << "= " << argInfoAsFloatsString(arg) << std::endl;
+
         args.push_back(std::move(newArg));
       }
       m_ops.push_back({op.name, std::move(args)});

@@ -129,6 +129,9 @@ Graph_Info *extract_graph_info(void *grt, const char *params_data, uint64_t para
 
     gi->numOps = g->nodes_count;
     gi->ops = malloc(g->nodes_count * sizeof(Op_Info));
+    
+    printf("g->nodes_count %d\n", g->nodes_count);
+    
     for (int i = 0; i < g->nodes_count; i++)
     {
         // See: TVMGraphRuntime_Run
@@ -156,6 +159,7 @@ Graph_Info *extract_graph_info(void *grt, const char *params_data, uint64_t para
                 arg->dataSize = GetTensorSize(&g->data_entry[eids[j]].dl_tensor);
 
                 printf("    sz arg: %li  [%p]\n", arg->dataSize, arg->data);
+                printf("data: %f", *((float*)arg->data));
 
                 Storage_Info *storage = NULL;
                 uintptr_t p = (uintptr_t)arg->data;

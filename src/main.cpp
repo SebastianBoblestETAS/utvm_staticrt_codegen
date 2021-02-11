@@ -1,8 +1,10 @@
 #include "CodeGen.h"
 
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
+using std::cout;
 
 int main(int argc, char *argv[])
 {
@@ -39,6 +41,8 @@ int main(int argc, char *argv[])
 
     void *grt = create_tvm_rt(ssGraphFile.str().c_str(), paramData.data(), paramData.size());
     auto *gi = extract_graph_info(grt, paramData.data(), paramData.size());
+
+    cout << "params.bin: " << paramData.size() << " bytes" << std::endl;
 
     CodeGenerator cg(gi);
     cg.generateCode(argv[3], workspaceSize);
