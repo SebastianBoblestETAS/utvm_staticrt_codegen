@@ -6,7 +6,16 @@
 #include <map>
 #include <ctime>
 #include <algorithm>
+#include <iostream>
+#include <ostream>
 
+using std::cout;
+
+std::ostream &operator<<(std::ostream &o, const Graph_Info &gi)
+{
+    o << "bla";
+    return o;
+}
 
 static std::string GetByteArrayCode(const void *data, size_t len) {
     std::stringstream out;
@@ -22,6 +31,9 @@ static std::string GetByteArrayCode(const void *data, size_t len) {
 
 CodeGenerator::CodeGenerator(const Graph_Info *gi)
 {
+
+    cout << "Graph_Info: " << *gi << std::endl;
+
     std::map<Storage_Info *, int> storageToNewStorageIndex;
     for (int i = 0; i < gi->numStorages; i++) {
         Storage_Info *s = gi->storages[i];

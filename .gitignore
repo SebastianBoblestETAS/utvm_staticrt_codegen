@@ -2,3 +2,5 @@ build*/
 out/
 *.pyc
 core
+.idea/
+.vscode
