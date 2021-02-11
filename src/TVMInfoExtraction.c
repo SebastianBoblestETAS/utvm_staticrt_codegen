@@ -159,89 +159,87 @@ Graph_Info *extract_graph_info(void *grt, const char *params_data,
 
   for (int i = 0; i < g->nodes_count; i++) {
     // See: TVMGraphRuntime_Run
-    if (g->op_execs[i].fexec) {
-      printf("op[%i]: %s\n", i, g->nodes[i].param.func_name);
+    if (!g->op_execs[i].fexec) {
+      gi->ops[i].active = 0;
+      continue;
+    }
+    printf("op[%i]: %s\n", i, g->nodes[i].param.func_name);
 
-      gi->ops[i].active = 1;
-      strcpy(gi->ops[i].name, g->nodes[i].param.func_name);
+    gi->ops[i].active = 1;
+    strcpy(gi->ops[i].name, g->nodes[i].param.func_name);
 
-      int numArgs = g->nodes[i].inputs_count + g->nodes[i].param.num_outputs;
-      printf("  num args: %i\n", numArgs);
-      gi->ops[i].numArgs = numArgs;
-      gi->ops[i].args = malloc(numArgs * sizeof(Arg_Info));
-      uint32_t *eids = malloc(numArgs * sizeof(uint32_t));
-      for (int j = 0; j < g->nodes[i].inputs_count; j++) {
-        eids[j] = TVMGraphRuntime_GetEntryId(g, g->nodes[i].inputs[j].node_id,
-                                             g->nodes[i].inputs[j].index);
-      }
-      for (int j = 0; j < g->nodes[i].param.num_outputs; j++) {
-        eids[j + g->nodes[i].inputs_count] =
-            TVMGraphRuntime_GetEntryId(g, i, j);
-      }
-      for (int j = 0; j < numArgs; j++) {
-        Arg_Info *arg = &gi->ops[i].args[j];
-        arg->data = g->data_entry[eids[j]].dl_tensor.data;
-        arg->offset = 0;
-        arg->dataSize = GetTensorSize(&g->data_entry[eids[j]].dl_tensor);
-        printf("j: %d ", j);
-        printArgInfoFloat(arg);
-        printf(" g->storage_poolcount=%u\n", g->storage_pool_count);
+    int numArgs = g->nodes[i].inputs_count + g->nodes[i].param.num_outputs;
+    printf("  num args: %i\n", numArgs);
+    gi->ops[i].numArgs = numArgs;
+    gi->ops[i].args = malloc(numArgs * sizeof(Arg_Info));
+    uint32_t *eids = malloc(numArgs * sizeof(uint32_t));
+    for (int j = 0; j < g->nodes[i].inputs_count; j++) {
+      eids[j] = TVMGraphRuntime_GetEntryId(g, g->nodes[i].inputs[j].node_id,
+                                           g->nodes[i].inputs[j].index);
+    }
+    for (int j = 0; j < g->nodes[i].param.num_outputs; j++) {
+      eids[j + g->nodes[i].inputs_count] = TVMGraphRuntime_GetEntryId(g, i, j);
+    }
+    for (int j = 0; j < numArgs; j++) {
+      Arg_Info *arg = &gi->ops[i].args[j];
+      arg->data = g->data_entry[eids[j]].dl_tensor.data;
+      arg->offset = 0;
+      arg->dataSize = GetTensorSize(&g->data_entry[eids[j]].dl_tensor);
+      printf("j: %d ", j);
+      printArgInfoFloat(arg);
+      printf(" g->storage_poolcount=%u\n", g->storage_pool_count);
 
-        Storage_Info *storage = NULL;
-        uintptr_t p = (uintptr_t)arg->data;
-        for (int k = 0; k < g->storage_pool_count; k++) {
-          uintptr_t ps = (uintptr_t)g->storage_pool[k].array.dl_tensor.data;
-          size_t sz = GetTensorSize(&g->storage_pool[k].array.dl_tensor);
+      Storage_Info *storage = NULL;
+      uintptr_t p = (uintptr_t)arg->data;
+      for (int k = 0; k < g->storage_pool_count; k++) {
+        uintptr_t ps = (uintptr_t)g->storage_pool[k].array.dl_tensor.data;
+        size_t sz = GetTensorSize(&g->storage_pool[k].array.dl_tensor);
 
-          printf("\tk = %d: TensorSize = %lu\n", k, sz);
+        printf("\tk = %d: TensorSize = %lu\n", k, sz);
 
-          if (p >= ps && p < ps + sz) {
-            printf("\tNonstatic ");
-            // Arg is mapped to storage. Is static if part of params file.
-            storage = GetOrAddStorage(
-                gi, (void *)ps, sz,
-                IsInList(eids[j], staticInputEIDs, numStaticInputEIDs));
-            arg->offset = (uintptr_t)storage->buffer - (uintptr_t)arg->data;
-            printf("\t");
-            printStorageInfoFloat(storage);
-            break;
-          }
-        }
-        if (!storage) {
-          printf("\tStatic ");
-          // Has to be static data.
-          storage = GetOrAddStorage(gi, arg->data, arg->dataSize, true);
+        if (p >= ps && p < ps + sz) {
+          printf("\tNonstatic ");
+          // Arg is mapped to storage. Is static if part of params file.
+          storage = GetOrAddStorage(
+              gi, (void *)ps, sz,
+              IsInList(eids[j], staticInputEIDs, numStaticInputEIDs));
+          arg->offset = (uintptr_t)storage->buffer - (uintptr_t)arg->data;
           printf("\t");
           printStorageInfoFloat(storage);
-        }
-        arg->storage = storage;
-
-        for (int k = 0; k < g->input_nodes_count; k++) {
-          if (IsInList(eids[j], staticInputEIDs, numStaticInputEIDs)) {
-            // Do not consider statically assigned args as input.
-            continue;
-          }
-          if (eids[j] == TVMGraphRuntime_GetEntryId(g, g->input_nodes[k], 0)) {
-            gi->numInputs++;
-            gi->inputs =
-                realloc(gi->inputs, gi->numInputs * sizeof(Arg_Info *));
-            gi->inputs[gi->numInputs - 1] = arg;
-          }
-        }
-        for (int k = 0; k < g->outputs_count; k++) {
-          if (eids[j] == TVMGraphRuntime_GetEntryId(g, g->outputs[k].node_id,
-                                                    g->outputs[k].index)) {
-            gi->numOutputs++;
-            gi->outputs =
-                realloc(gi->outputs, gi->numOutputs * sizeof(Arg_Info *));
-            gi->outputs[gi->numOutputs - 1] = arg;
-          }
+          break;
         }
       }
-      free(eids);
-    } else {
-      gi->ops[i].active = 0;
+      if (!storage) {
+        printf("\tStatic ");
+        // Has to be static data.
+        storage = GetOrAddStorage(gi, arg->data, arg->dataSize, true);
+        printf("\t");
+        printStorageInfoFloat(storage);
+      }
+      arg->storage = storage;
+
+      for (int k = 0; k < g->input_nodes_count; k++) {
+        if (IsInList(eids[j], staticInputEIDs, numStaticInputEIDs)) {
+          // Do not consider statically assigned args as input.
+          continue;
+        }
+        if (eids[j] == TVMGraphRuntime_GetEntryId(g, g->input_nodes[k], 0)) {
+          gi->numInputs++;
+          gi->inputs = realloc(gi->inputs, gi->numInputs * sizeof(Arg_Info *));
+          gi->inputs[gi->numInputs - 1] = arg;
+        }
+      }
+      for (int k = 0; k < g->outputs_count; k++) {
+        if (eids[j] == TVMGraphRuntime_GetEntryId(g, g->outputs[k].node_id,
+                                                  g->outputs[k].index)) {
+          gi->numOutputs++;
+          gi->outputs =
+              realloc(gi->outputs, gi->numOutputs * sizeof(Arg_Info *));
+          gi->outputs[gi->numOutputs - 1] = arg;
+        }
+      }
     }
+    free(eids);
   }
 
   free(staticInputEIDs);
